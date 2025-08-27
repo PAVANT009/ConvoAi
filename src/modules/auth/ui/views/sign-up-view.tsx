@@ -5,7 +5,7 @@ import Link from "next/link";
 import { OctagonAlertIcon } from "lucide-react";
 import {zodResolver} from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-
+import { FaGithub, FaGoogle } from "react-icons/fa";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
@@ -170,8 +170,16 @@ const SignUpView = () => {
                                 </span>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <Button disabled={loading} variant="outline" className="w-full" type="button"> Google </Button>
-                                <Button disabled={loading} variant="outline" className="w-full" type="button"> Github </Button>
+                                <Button onClick={() => {
+                                                                    authClient.signIn.social({
+                                                                        provider: "google",
+                                                                    })
+                                                                }} disabled={loading} variant="outline" className="w-full" type="button"> <FaGoogle/> </Button>
+                                <Button onClick={() => {
+                                                                    authClient.signIn.social({
+                                                                        provider: "github",
+                                                                    })
+                                                                }}  disabled={loading} variant="outline" className="w-full" type="button"> <FaGithub/> </Button>
                             </div>
                             <div className="text-center text-sm">
                                 already has an account?{" "} <Link className="underline underline-offset-4" href={"/sign-in"}> Sign in</Link>

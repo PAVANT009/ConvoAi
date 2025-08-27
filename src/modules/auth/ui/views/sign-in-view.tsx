@@ -22,6 +22,7 @@ import {
 import Image from "next/image"
 import { useForm } from "react-hook-form";
 import { useState } from "react";
+import { FaGithub, FaGoogle } from "react-icons/fa";
 
 const formsSchema = z.object({
     email: z.email(),
@@ -126,8 +127,16 @@ const SignInView = () => {
                                 </span>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                                <Button disabled={loading} variant="outline" className="w-full" type="button"> Google </Button>
-                                <Button disabled={loading} variant="outline" className="w-full" type="button"> Github </Button>
+                                <Button onClick={() => {
+                                    authClient.signIn.social({
+                                        provider: "google",
+                                    })
+                                }} disabled={loading} variant="outline" className="w-full" type="button"> <FaGoogle/> </Button>
+                                <Button onClick={() => {
+                                    authClient.signIn.social({
+                                        provider: "github",
+                                    })
+                                }} disabled={loading} variant="outline" className="w-full" type="button"> <FaGithub/> </Button>
                             </div>
                             <div className="text-center text-sm">
                                 Don&apos;t have an account?{" "} <Link className="underline underline-offset-4" href={"/sign-up"}> Sign up</Link>
@@ -152,3 +161,4 @@ const SignInView = () => {
 }
 
 export default SignInView
+
