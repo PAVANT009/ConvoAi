@@ -25,7 +25,7 @@ import { useState } from "react";
 import { FaGithub, FaGoogle } from "react-icons/fa";
 
 const formsSchema = z.object({
-    email: z.email(),
+    email: z.string().email(),
     password: z.string().min(1,{message: "Password is required"})
 });
 
@@ -48,8 +48,8 @@ const SignInView = () => {
         setLoading(true);
         await authClient.signIn.email(
             {
-                email: data.email,
-                password: data.password,
+                email: data.email as string,
+                password: data.password as string,
             },
             {
                 onSuccess: () => {
