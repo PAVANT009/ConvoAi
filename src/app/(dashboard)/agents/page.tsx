@@ -12,7 +12,6 @@ const  Page  = async () => {
         <HydrationBoundary state={dehydrate(queryClient)}>
             <Suspense fallback= {<AgentViewLoading/>}>
                 <ErrorBoundary fallback={<AgentsViewError/>}>
-
                     <AgentsView/> 
                 </ErrorBoundary>
             </Suspense>
