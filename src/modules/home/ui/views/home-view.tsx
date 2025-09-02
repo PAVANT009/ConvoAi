@@ -1,17 +1,27 @@
 "use client"
 
-import { useTRPC } from "@/trpc/client"
-import { useQuery } from "@tanstack/react-query";
+import type { InferModel } from "drizzle-orm";
+import { agents } from "@/db/schema";
 
+// Single row type
+type Agent = InferModel<typeof agents>;
 
-const Homeview = () => {
-  const trpc = useTRPC();
-  const  {data} =useQuery(trpc.hello.queryOptions({ text: "Antonio"}))
+type HomeviewProps = {
+  data: Agent[];
+};
+
+const Homeview = ({ data }: HomeviewProps) => {
   return (
     <div>
-      {data?.greeting}
+      {data.map((agent) => (
+        <div key={agent.id}>
+          <p>{agent.name}</p>
+          <p>{agent.instructions}</p>
+          <p>{agent.createdAt.toString()}</p>
+        </div>
+      ))}
     </div>
   )
 }
 
-export default Homeview
+export default Homeview;
