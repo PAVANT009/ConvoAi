@@ -6,7 +6,7 @@ import Homeview from "@/modules/home/ui/views/home-view";
 import { caller } from "@/trpc/server";
 
 const page = async () => {
-  const data = await caller.agents.getMany();
+  const data = await caller.agents.getMany({});
   console.log(data);
 
   const session = await auth.api.getSession({
@@ -17,7 +17,7 @@ const page = async () => {
     redirect('/sign-in');
   }
 
-  return <Homeview data={data} />
+  return <Homeview data={data.items} />
 }
 
 export default page
