@@ -25,7 +25,7 @@ import { useState } from "react";
 
 const formsSchema = z.object({
     name: z.string().min(1,{message: "Name is required"}),
-    email: z.email(),
+    email: z.string().email(),
     password: z.string().min(1,{message: "Password is required"}),
     confirmPassword: z.string().min(1,{message: "Confirm password is required"}),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -56,9 +56,9 @@ const SignUpView = () => {
         setLoading(true);
         await authClient.signUp.email(
             {
-                name: data.name,
-                email: data.email,
-                password: data.password,
+                name: data.name as string,
+                email: data.email as string,
+                password: data.password as string,
             },
             {
                 onSuccess: () => {

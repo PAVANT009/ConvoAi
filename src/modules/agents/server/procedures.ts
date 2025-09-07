@@ -124,28 +124,27 @@ export const agentsRouter = createTRPCRouter({
           totalPages,
         }
     }),
-create: protectedProcedure
-  .input(agentsInsertSchema)
-  .mutation(async ({ input, ctx }) => {
-    if (!ctx.auth?.user?.id) {
-      throw new Error("Unauthorized");
-    }
+    create: protectedProcedure
+      .input(agentsInsertSchema)
+      .mutation(async ({ input, ctx }) => {
+        if (!ctx.auth?.user?.id) {
+          throw new Error("Unauthorized");
+        }
 
-    const [createdAgent] = await db
-      .insert(agents)
-      .values({
-        ...input,
-        instructions: input.instructions, 
-        userId: ctx.auth.user.id,
+        const [createdAgent] = await db
+          .insert(agents)
+          .values({
+            name: input.name,
+            agentId: input.agentId,
+            userId: ctx.auth.user.id,
+          })
+          .returning();
+
+        if (!createdAgent) {
+          throw new Error("Failed to create agent");
+        }
+
+        return createdAgent;
       })
-      .returning();
-
-    if (!createdAgent) {
-      throw new Error("Failed to create agent");
-    }
-
-    return createdAgent;
-  })
 
 })
-
