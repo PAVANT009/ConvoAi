@@ -38,7 +38,7 @@ const AgentsView = () => {
             {data.items.length === 0 && (
                 <EmptyState
                     title="Create your first agent"
-                    description="Create an agent to join your meetings. Each agent will follow your instructions and can interact with participants during the call."
+                    description="Create an agent to join your meetings. Each agent will have a unique ID and can interact with participants during the call."
                 />
             ) }
         </div> 

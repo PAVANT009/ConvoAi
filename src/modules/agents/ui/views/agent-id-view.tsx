@@ -88,8 +88,8 @@ export const AgentIdView = ({ agentId } : Props) => {
                             {data.meetingCount} {data.meetingCount === 1 ? "meeting" : "meetings"}
                         </Badge>
                         <div className="flex flex-col gap-y-4">
-                            <p className="text-lg font-medium">Instructions</p>
-                            <p className="text-neutral-800">{data.instructions}</p>
+                            <p className="text-lg font-medium">Agent ID</p>
+                            <p className="text-neutral-800">{data.agentId}</p>
                         </div>
                     </div>
                 </div>

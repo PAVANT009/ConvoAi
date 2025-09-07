@@ -41,7 +41,7 @@ import { ErrorBoundary } from "react-error-boundary";
 
 
 interface Props {
-  params: { agentId: string };
+  params: Promise<{ agentId: string }>;
 }
 
 const Page = async ({ params }: Props) => {

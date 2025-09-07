@@ -83,7 +83,7 @@ export const AgentForm = ({
         resolver: zodResolver(agentsInsertSchema),
         defaultValues: {
             name: initialValues?.name ?? "",
-            instructions: initialValues?.instructions??  "",
+            agentId: initialValues?.agentId ?? "",
         }
     });
     const isEdit = !!initialValues?.id;
@@ -121,15 +121,15 @@ export const AgentForm = ({
                     )}
                 />
                 <FormField
-                    name="instructions"
+                    name="agentId"
                     control={form.control}
                     render={({field}) => (
                         <FormItem>
-                            <FormLabel>Instructions</FormLabel>
+                            <FormLabel>Agent ID</FormLabel>
                             <FormControl>
-                                <Textarea 
+                                <Input 
                                     {...field} 
-                                    placeholder="You are a helpful assistant" />
+                                    placeholder="agent-123" />
                             </FormControl>
                             <FormMessage />
                         </FormItem>
