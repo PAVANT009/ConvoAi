@@ -8,11 +8,13 @@
     "start": "next start",
     "lint": "next lint",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:webhook": "ngrok http --url=pseudoprophetical-unmenially-ulysses.ngrok-free.app 3000"
   },
   "dependencies": {
     "@dicebear/collection": "^9.2.2",
     "@dicebear/core": "^9.2.2",
+    "@google/genai": "^1.19.0",
     "@hookform/resolvers": "^5.2.1",
     "@neondatabase/serverless": "^1.0.0",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -64,6 +66,7 @@
     "next": "15.3.2",
     "next-themes": "^0.4.6",
     "nuqs": "^2.5.2",
+    "openai": "^5.20.1",
     "react": "^19.0.0",
     "react-day-picker": "^9.9.0",
     "react-dom": "^19.0.0",
