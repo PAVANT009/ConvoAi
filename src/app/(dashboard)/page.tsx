@@ -8,7 +8,7 @@ import { caller } from "@/trpc/server";
 export const dynamic = 'force-dynamic';
 
 const page = async () => {
-  const data = await caller.agents.getMany({});
+  const data = await caller.agents.getMany({}); 
   console.log(data);
 
   const session = await auth.api.getSession({
