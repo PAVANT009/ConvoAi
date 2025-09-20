@@ -19,6 +19,7 @@ import { CallUI } from "./call-ui";
 interface Props {
     meetingId: string;
     meetingName: string;
+    streamCallId: string | null;
     userId: string;
     userName: string;
     userImage: string;
@@ -27,6 +28,7 @@ interface Props {
 export const CallConnect = ({
     meetingId,
     meetingName,
+    streamCallId,
     userId,
     userName,
     userImage
@@ -38,34 +40,73 @@ export const CallConnect = ({
 
     const [client, setClient] = useState<StreamVideoClient>();
     useEffect(() => {
-        const _client = new StreamVideoClient({
-            apiKey: process.env.NEXT_PUBLIC_STREAM_VIDEO_API_KEY!,
-            user: {
-                id: userId,
-                name: userName,
-                image: userImage,
-            },
-            tokenProvider: generateToken,
-        });
+        let isCancelled = false;
 
-        setClient(_client);
+        const init = async () => {
+            const token = await generateToken();
+            if (isCancelled) return;
+
+            const _client = new StreamVideoClient({
+                apiKey: process.env.NEXT_PUBLIC_STREAM_VIDEO_API_KEY!,
+                user: {
+                    id: userId,
+                    name: userName,
+                    image: userImage,
+                },
+                token,
+            });
+
+            if (isCancelled) return;
+            setClient(_client);
+        };
+
+        void init();
 
         return () => {
-            _client.disconnectUser();
+            isCancelled = true;
+            if (client) {
+                client.disconnectUser();
+            }
             setClient(undefined);
         }
     },[userId, userName, userImage, generateToken]);
 
     const [call, setCall] = useState<Call>();
     useEffect(() => {
-        if(!client) return;
+        console.log("🔄 CallConnect useEffect triggered:", {
+            hasClient: !!client,
+            streamCallId,
+            meetingId
+        });
 
-        const _call = client.call("default", meetingId);
+        if(!client || !streamCallId) {
+            console.log("❌ Missing client or streamCallId:", { hasClient: !!client, streamCallId });
+            return;
+        }
+
+        console.log("📞 Creating Stream call with ID:", streamCallId);
+        console.log("🔍 StreamCallId format check:", {
+            original: streamCallId,
+            hasColon: streamCallId.includes(':'),
+            parts: streamCallId.split(':')
+        });
+        
+        // Extract call ID from full call ID (remove type prefix if present)
+        const callId = streamCallId.includes(':') ? streamCallId.split(':')[1] : streamCallId;
+        console.log("🔧 Extracted call ID:", callId);
+        
+        const _call = client.call("default", callId);
         _call.camera.disable();
         _call.microphone.disable();
         setCall(_call);
+        
+        console.log("✅ Stream call instance created:", {
+            callId: _call.id,
+            state: _call.state.callingState
+        });
 
         return () => {
+            console.log("🧹 Cleaning up call instance");
             if(_call.state.callingState !== CallingState.LEFT) {
                 _call.leave();
                 _call.endCall();
@@ -73,7 +114,7 @@ export const CallConnect = ({
             }
         }
 
-    },[client, meetingId]);
+    },[client, streamCallId]);
 
     if(!client || !call) {
         return (

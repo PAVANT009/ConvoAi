@@ -26,10 +26,11 @@ export const meetingsRouter = createTRPCRouter({
     const expirationTime = Math.floor(Date.now() / 1000) + 60 * 60;
     const issuedAt = Math.floor(Date.now() / 1000) - 60;
 
+    // Use 'iat' (issued-at) instead of an incorrect 'validity_in_seconds'
     const token = streamVideo.generateUserToken({
       user_id: ctx.auth.user.id,
       exp: expirationTime,
-      validity_in_seconds: issuedAt,
+      iat: issuedAt,
     });
 
     return token;
@@ -78,67 +79,78 @@ export const meetingsRouter = createTRPCRouter({
             return updatedMeeting;
         }),
         create: protectedProcedure
-          .input(meetingsInsertSchema)
-          .mutation(async ({ input, ctx }) => {
-            const [createdMeeting] = await db
-              .insert(meetings)
-              .values({
-                ...input,
-                userId: ctx.auth.user.id,
-              })
-              .returning();
-
-            const call = streamVideo.video.call("default", createdMeeting.id);
-            await call.create({
-              data: {
-                created_by_id: ctx.auth.user.id,
-                custom: {
-                  meetingId: createdMeeting.id,
-                  meetingName: createdMeeting.name,
-                },
-                settings_override: {
-                  transcription: {
-                    language: "en",
-                    mode: "auto-on",
-                    closed_caption_mode: "auto-on"
-                  },
-                  recording: {
-                    mode: "auto-on",
-                    quality: "1080p",
-                  }
-                }
-              }
-            });
-
-            const [existingAgent] = await db
-              .select()
-              .from(agents)
-              .where(eq(agents.id, createdMeeting.agentId));
+        .input(meetingsInsertSchema)
+        .mutation(async ({ input, ctx }) => {
+          // 1️⃣ Insert the meeting in DB
+          const [createdMeeting] = await db
+            .insert(meetings)
+            .values({
+              ...input,
+              userId: ctx.auth.user.id,
+            })
+            .returning();
+      
+          // 2️⃣ Create the Stream call
+          console.log("🔄 Creating Stream call for meeting:", createdMeeting.id);
+          const callInstance = streamVideo.video.call("default", createdMeeting.id);
+          const createdCall = await callInstance.create({
+            data: {
+              created_by_id: ctx.auth.user.id,
+              custom: {
+                meetingId: createdMeeting.id,
+                meetingName: createdMeeting.name,
+              },
+              settings_override: {
+                transcription: { language: "en", mode: "auto-on", closed_caption_mode: "auto-on" },
+                recording: { mode: "auto-on", quality: "1080p" },
+              },
+            },
+          });
+          
+          console.log("✅ Stream call created:", {
+            callId: createdCall.call.cid,
+            meetingId: createdMeeting.id,
+            callData: createdCall.call
+          });
+      
+          // 3️⃣ Save the Stream call ID in DB
+          console.log("💾 Saving streamCallId to database:", createdCall.call.cid);
+          const [updatedMeeting] = await db
+            .update(meetings)
+            .set({ streamCallId: createdCall.call.cid }) // ← Use the actual call ID
+            .where(eq(meetings.id, createdMeeting.id))
+            .returning();
             
-              if(!existingAgent) {
-                throw new TRPCError({
-                  code: "NOT_FOUND",
-                  message: "Agent not found"
-                })
-              }
-
-              await streamVideo.upsertUsers([
-                {
-                  id: existingAgent.id,
-                  name: existingAgent.name,
-                  role: "user",
-                  image:  generateAvatarUri({
-                    seed: existingAgent.id,
-                    variant: "botttsNeutral"
-                  })
-                }
-              ])
-
-            return createdMeeting;
-          }),
+          console.log("✅ Database updated with streamCallId:", updatedMeeting?.streamCallId);
+      
+          // 4️⃣ Fetch the agent
+          const [existingAgent] = await db
+            .select()
+            .from(agents)
+            .where(eq(agents.id, createdMeeting.agentId));
+      
+          if (!existingAgent) {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Agent not found" });
+          }
+      
+          // 5️⃣ Upsert agent in Stream
+          await streamVideo.upsertUsers([
+            {
+              id: existingAgent.id,
+              name: existingAgent.name,
+              role: "user",
+              image: generateAvatarUri({ seed: existingAgent.id, variant: "botttsNeutral" }),
+            },
+          ]);
+      
+          // 6️⃣ Return the meeting with Stream call ID
+          return updatedMeeting;
+        }),
+      
     getOne: protectedProcedure
     .input(z.object({id: z.string()}))
     .query(async ({input, ctx}) => {
+        console.log("🔍 Fetching meeting data for ID:", input.id);
         const [existingMeeting] = await db
         .select({
           ...getTableColumns(meetings),
@@ -153,6 +165,13 @@ export const meetingsRouter = createTRPCRouter({
             eq(meetings.userId, ctx.auth.user.id),
           )
         );
+
+        console.log("📊 Meeting data retrieved:", {
+          meetingId: existingMeeting?.id,
+          streamCallId: existingMeeting?.streamCallId,
+          status: existingMeeting?.status,
+          hasStreamCallId: !!existingMeeting?.streamCallId
+        });
 
         if(!existingMeeting)
           throw new TRPCError({
