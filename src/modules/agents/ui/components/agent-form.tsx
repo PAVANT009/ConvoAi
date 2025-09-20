@@ -10,6 +10,7 @@ import { GenerateAvatar } from "@/components/generated-avatar";
 import {
     Form,
     FormControl,
+    FormDescription,
     FormField,
     FormItem,
     FormLabel,
@@ -84,6 +85,7 @@ export const AgentForm = ({
         defaultValues: {
             name: initialValues?.name ?? "",
             agentId: initialValues?.agentId ?? "",
+            prompt: initialValues?.prompt ?? "",
         }
     });
     const isEdit = !!initialValues?.id;
@@ -131,6 +133,26 @@ export const AgentForm = ({
                                     {...field} 
                                     placeholder="agent-123" />
                             </FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                <FormField
+                    name="prompt"
+                    control={form.control}
+                    render={({field}) => (
+                        <FormItem>
+                            <FormLabel>AI Prompt</FormLabel>
+                            <FormControl>
+                                <Textarea 
+                                    {...field} 
+                                    placeholder="You are a helpful AI voice assistant for meetings. Speak naturally and conversationally. Be friendly, professional, and helpful. Keep responses concise and engaging. Always respond with your voice, not text."
+                                    className="min-h-[100px]"
+                                />
+                            </FormControl>
+                            <FormDescription>
+                                Customize how the AI agent behaves in meetings
+                            </FormDescription>
                             <FormMessage />
                         </FormItem>
                     )}

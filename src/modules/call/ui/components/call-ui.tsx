@@ -13,11 +13,39 @@ export const CallUI = ({ meetingName}: Props) => {
     const [show, setShow] = useState<"lobby" | "call" | "ended">("lobby");
 
     const handleJoin = async () => {
-    if(!call) return;
+    if(!call) {
+        console.log("❌ No call instance available for join");
+        return;
+    }
 
-    await call.join();
+    const state = call.state.callingState;
+    console.log("🔄 Attempting to join call:", {
+        callId: call.id,
+        currentState: state,
+        meetingName
+    });
 
-    setShow("call");
+    // Avoid calling join more than once
+    if (state === "joining" || state === "joined" || state === "reconnecting") {
+        console.log("⚠️ Call already in progress, skipping join");
+        setShow("call");
+        return;
+    }
+
+    try {
+        console.log("📞 Joining call...");
+        await call.join();
+        console.log("✅ Successfully joined call");
+        
+        // Add a small delay to let the webhook process
+        setTimeout(() => {
+            console.log("🔄 Call joined, checking for AI agent...");
+        }, 2000);
+        
+        setShow("call");
+    } catch (error) {
+        console.error("❌ Failed to join call:", error);
+    }
     };
 
     const handleLeave = () => {

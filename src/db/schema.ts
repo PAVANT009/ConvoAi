@@ -57,6 +57,7 @@ export const agents = pgTable("agents", {
               .notNull()
               .references(() => user.id, {onDelete: "cascade"}),
        agentId: text("agent_id").notNull(),
+       prompt: text("prompt"),
        createdAt: timestamp("created_at").notNull().defaultNow(),
        updatedAt: timestamp("updated_at").notNull().defaultNow(),
 })
@@ -71,15 +72,18 @@ export const meetingStatus = pgEnum("meeting_status", [
 
 export const meetings = pgTable("meetings", {
        id: text("id")
-              .primaryKey()
-              .$defaultFn(() => nanoid()),
+         .primaryKey()
+         .$defaultFn(() => nanoid()),
+     
+       streamCallId: text("stream_call_id"), 
+     
        name: text("name").notNull(),
        userId: text("user_id")
-              .notNull()
-              .references(() => user.id, {onDelete: "cascade"}),
+         .notNull()
+         .references(() => user.id, { onDelete: "cascade" }),
        agentId: text("agent_id")
-              .notNull()
-              .references(() => agents.id, {onDelete: "cascade"}),
+         .notNull()
+         .references(() => agents.id, { onDelete: "cascade" }),
        status: meetingStatus("status").notNull().default("upcoming"),
        startedAt: timestamp("started_at"),
        endedAt: timestamp("ended_at"),
@@ -88,5 +92,6 @@ export const meetings = pgTable("meetings", {
        summary: text("summary"),
        createdAt: timestamp("created_at").notNull().defaultNow(),
        updatedAt: timestamp("updated_at").notNull().defaultNow(),
-})
+     });
+     
 
