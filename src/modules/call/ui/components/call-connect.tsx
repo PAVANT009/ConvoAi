@@ -1,7 +1,7 @@
 "use client";
 
 import { LoaderIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
     Call,
     CallingState,
@@ -34,9 +34,8 @@ export const CallConnect = ({
     userImage
 }: Props) => {
     const trpc = useTRPC();
-    const { mutateAsync: generateToken} = useMutation(
-        trpc.meetings.generateToken.mutationOptions(),
-    );
+    const generateTokenMutation = useMutation(trpc.meetings.generateToken.mutationOptions());
+    const generateToken = useCallback(() => generateTokenMutation.mutateAsync(), [generateTokenMutation]);
 
     const [client, setClient] = useState<StreamVideoClient>();
     useEffect(() => {
