@@ -7,6 +7,7 @@ export const { GET, POST, PUT } = serve({
   baseUrl: "http://localhost:3000/api/inngest",
   functions: [meetingsProcessing],
 });
+
 export const config = {
   api: {
     bodyParser: false, 
