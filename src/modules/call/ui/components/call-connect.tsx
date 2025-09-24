@@ -34,9 +34,9 @@ export const CallConnect = ({
     userImage
 }: Props) => {
     const trpc = useTRPC();
-    const generateTokenMutation = useMutation(trpc.meetings.generateToken.mutationOptions());
-    const generateToken = useCallback(() => generateTokenMutation.mutateAsync(), [generateTokenMutation]);
-
+    const { mutateAsync: generateToken } = useMutation(
+        trpc.meetings.generateToken.mutationOptions(),
+    );
     const [client, setClient] = useState<StreamVideoClient>();
     useEffect(() => {
         let isCancelled = false;
