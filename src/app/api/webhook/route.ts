@@ -20,17 +20,16 @@ function verifySignatureWithSDK(body: string, signature: string): boolean {
 
 // Helper to extract meetingId from payload
 function getMeetingId(payload: any): string | undefined {
-  // Prefer custom.meetingId if present, else try splitting call_cid
-  return payload?.call?.custom?.meetingId ||
-    (payload?.call_cid && payload.call_cid.split(":")[1]);
+  return (
+    payload?.call?.custom?.meetingId ||
+    (payload?.call_cid && payload.call_cid.split(":")[1])
+  );
 }
 
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-signature");
-
-  if (!signature) {
+  if (!signature)
     return NextResponse.json({ error: "Missing signature" }, { status: 400 });
-  }
 
   const body = await req.text();
   if (!verifySignatureWithSDK(body, signature)) {
@@ -41,7 +40,10 @@ export async function POST(req: NextRequest) {
   try {
     payload = JSON.parse(body);
   } catch {
-    return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid JSON payload" },
+      { status: 400 }
+    );
   }
 
   const eventType = payload?.type;
@@ -50,14 +52,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: "ok", message: "Test webhook working" });
   }
 
+  // -------------------------
+  // CALL SESSION STARTED
+  // -------------------------
   if (eventType === "call.session_started") {
     const event = payload as CallSessionStartedEvent;
     const meetingId = getMeetingId(event);
     const callId = event.call.cid;
-
-    if (!meetingId) {
-      return NextResponse.json({ error: "Missing meeting ID" }, { status: 400 });
-    }
+    if (!meetingId)
+      return NextResponse.json(
+        { error: "Missing meeting ID" },
+        { status: 400 }
+      );
 
     const [existingMeeting] = await db
       .select()
@@ -91,7 +97,10 @@ export async function POST(req: NextRequest) {
 
         meetingToProcess = updatedMeeting;
       } else {
-        return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+        return NextResponse.json(
+          { error: "Meeting not found" },
+          { status: 404 }
+        );
       }
     }
 
@@ -110,17 +119,16 @@ export async function POST(req: NextRequest) {
       .select()
       .from(agents)
       .where(eq(agents.id, meetingToProcess.agentId));
-
-    if (!existingAgent) {
+    if (!existingAgent)
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
-    }
 
-    const extractedCallId = callId.includes(":") ? callId.split(":")[1] : callId;
+    const extractedCallId = callId.includes(":")
+      ? callId.split(":")[1]
+      : callId;
 
     if (process.env.OPENAI_API_KEY) {
-      const call = streamVideo.video.call("default", extractedCallId);
-
       try {
+        const call = streamVideo.video.call("default", extractedCallId);
         const realtimeClient = await streamVideo.video.connectOpenAi({
           call,
           openAiApiKey: process.env.OPENAI_API_KEY!,
@@ -130,23 +138,21 @@ export async function POST(req: NextRequest) {
 
         const basePrompt =
           existingAgent.prompt ||
-          "You are a helpful AI meeting assistant. You should be friendly, professional, and helpful in meetings. Respond naturally to questions and provide useful insights. Always respond with your voice, not text.";
-
-        // Enforce English-only speech output for the realtime session
-        const prompt = `${basePrompt}\n\nLanguage policy: Speak only in English (en-US). Do not switch languages. If the user speaks another language, politely ask them in English to continue in English.`;
+          "You are a helpful AI meeting assistant. Speak naturally and professionally in English.";
 
         await realtimeClient.updateSession({
-          instructions: prompt,
-          voice: (process.env.OPENAI_REALTIME_VOICE as
-            | "verse"
-            | "alloy"
-            | "ash"
-            | "ballad"
-            | "coral"
-            | "echo"
-            | "sage"
-            | "shimmer"
-            | undefined) || "verse",
+          instructions: basePrompt,
+          voice:
+            (process.env.OPENAI_REALTIME_VOICE as
+              | "verse"
+              | "alloy"
+              | "ash"
+              | "ballad"
+              | "coral"
+              | "echo"
+              | "sage"
+              | "shimmer"
+              | undefined) || "verse",
           modalities: ["text", "audio"],
           turn_detection: {
             type: "server_vad",
@@ -160,22 +166,22 @@ export async function POST(req: NextRequest) {
           process.env.OPENAI_REALTIME_GREETING ||
           "Hi everyone, I'm your AI meeting assistant. I'm here to help with summaries and questions.";
 
-        const anyClient: any = realtimeClient;
-
-        if (typeof anyClient.createResponse === "function") {
-          await anyClient.createResponse({
+        if (typeof (realtimeClient as any).createResponse === "function") {
+          await (realtimeClient as any).createResponse({
             instructions: greeting,
             modalities: ["audio"],
             conversation: true,
           });
-        } else if (typeof anyClient.response?.create === "function") {
-          await anyClient.response.create({
+        } else if (
+          typeof (realtimeClient as any).response?.create === "function"
+        ) {
+          await (realtimeClient as any).response.create({
             instructions: greeting,
             modalities: ["audio"],
             conversation: true,
           });
-        } else if (typeof anyClient.send === "function") {
-          await anyClient.send({
+        } else if (typeof (realtimeClient as any).send === "function") {
+          await (realtimeClient as any).send({
             type: "response.create",
             response: {
               instructions: greeting,
@@ -184,105 +190,117 @@ export async function POST(req: NextRequest) {
             },
           });
         }
-
-        realtimeClient.on("response", () => {});
-        realtimeClient.on("speech_start", () => {});
-        realtimeClient.on("speech_end", () => {});
-        realtimeClient.on("transcription", () => {});
-        realtimeClient.on("error", (err: any) => {
-          console.error("Realtime client error:", err);
-        });
-        realtimeClient.on("status", () => {});
       } catch (err) {
         console.error("Failed to connect OpenAI realtime:", err);
       }
     }
+
     return NextResponse.json({ status: "ok" });
   }
 
+  // -------------------------
+  // CALL PARTICIPANT LEFT
+  // -------------------------
   if (eventType === "call.session_participant_left") {
     const event = payload as CallSessionParticipantLeftEvent;
     const callId = event.call_cid && event.call_cid.split(":")[1];
-
-    if (!callId) {
-      return NextResponse.json({ error: "Missing meeting ID" }, { status: 400 });
-    }
+    if (!callId)
+      return NextResponse.json(
+        { error: "Missing meeting ID" },
+        { status: 400 }
+      );
 
     try {
-      const call = streamVideo.video.call("default", callId);
-      await call.end();
+      await streamVideo.video.call("default", callId).end();
     } catch (err) {
       console.error("Error ending call:", err);
     }
+
     return NextResponse.json({ status: "ok" });
   }
 
+  // -------------------------
+  // CALL SESSION ENDED
+  // -------------------------
   if (eventType === "call.session_ended") {
     const event = payload as CallEndedEvent;
     const meetingId = getMeetingId(event);
-
-    if (!meetingId) {
-      return NextResponse.json({ error: "Missing meeting ID" }, { status: 400 });
-    }
+    if (!meetingId)
+      return NextResponse.json(
+        { error: "Missing meeting ID" },
+        { status: 400 }
+      );
 
     await db
       .update(meetings)
-      .set({
-        status: "processing",
-        endedAt: new Date(),
-      })
+      .set({ status: "processing", endedAt: new Date() })
       .where(and(eq(meetings.id, meetingId), eq(meetings.status, "active")));
+
     return NextResponse.json({ status: "ok" });
   }
 
+  // -------------------------
+  // CALL TRANSCRIPTION READY (Inngest Trigger)
+  // -------------------------
   if (eventType === "call.transcription_ready") {
     const event = payload as CallTranscriptionReadyEvent;
     const meetingId = getMeetingId(event);
-
-    if (!meetingId) {
-      return NextResponse.json({ error: "Missing meeting ID" }, { status: 400 });
-    }
+    if (!meetingId)
+      return NextResponse.json(
+        { error: "Missing meeting ID" },
+        { status: 400 }
+      );
 
     const [updatedMeeting] = await db
       .update(meetings)
-      .set({
-        transcriptUrl: event.call_transcription.url,
-      })
+      .set({ transcriptUrl: event.call_transcription.url })
       .where(eq(meetings.id, meetingId))
       .returning();
 
-    if (!updatedMeeting) {
-      return NextResponse.json({ error: "Meeting not found" }, { status: 404 });
+    // DEDUPLICATION GUARD
+    if (updatedMeeting.status !== "completed") {
+      if (updatedMeeting.status !== "processing") {
+        await db
+          .update(meetings)
+          .set({ status: "processing" })
+          .where(eq(meetings.id, updatedMeeting.id));
+      }
+      const res = await inngest.send({
+        name: "meetings/processing",
+        data: {
+          meetingId: updatedMeeting.id,
+          transcriptUrl: updatedMeeting.transcriptUrl!,
+        },
+      });
+      console.log("Inngest send response:", res);
     }
 
-    await inngest.send({
-      name: "meetings/processing",
-      data: {
-        meetingId: updatedMeeting.id,
-        transcriptUrl: updatedMeeting.transcriptUrl!,
-      }
-    })
-
-    return NextResponse.json({ status: "ok" });
+    return NextResponse.json({ status: "ok" }); // ✅ added
   }
 
+  // -------------------------
+  // CALL RECORDING READY
+  // -------------------------
   if (eventType === "call.recording_ready") {
     const event = payload as CallRecordingReadyEvent;
     const meetingId = getMeetingId(event);
+    if (!meetingId)
+      return NextResponse.json(
+        { error: "Missing meeting ID" },
+        { status: 400 }
+      );
 
-    if (!meetingId) {
-      return NextResponse.json({ error: "Missing meeting ID" }, { status: 400 });
-    }
     await db
       .update(meetings)
-      .set({
-        recordingUrl: event.call_recording.url,
-      })
+      .set({ recordingUrl: event.call_recording.url })
       .where(eq(meetings.id, meetingId));
+
     return NextResponse.json({ status: "ok" });
   }
 
-  // Unknown event type
+  // -------------------------
+  // UNKNOWN EVENT
+  // -------------------------
   console.warn("Unknown webhook event type:", eventType);
   return NextResponse.json({ status: "ok" });
 }
