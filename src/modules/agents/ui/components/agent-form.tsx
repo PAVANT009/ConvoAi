@@ -22,6 +22,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import Router from "next/router";
 
 interface AgentFormProps {
     onSuccess? : () => void;
@@ -43,14 +44,18 @@ export const AgentForm = ({
                 await queryClient.invalidateQueries(
                     trpc.agents.getMany.queryOptions({})
                 );
+                await queryClient.invalidateQueries(
+                    trpc.premium.getFreeUsage.queryOptions(),
+                );
 
-                //TODO: Invalid free tier usage
                 onSuccess?.()
             },
             onError: (error) => {
                 toast.error(error.message);
 
-                //TODO: Check if error code is "FORBIDDEN", redirect to "/upgrade"
+                if(error.data?.code === "FORBIDDEN") {
+                    Router.push("/upgrade");
+                }
             },
         })
     );
@@ -85,7 +90,7 @@ export const AgentForm = ({
         defaultValues: {
             name: initialValues?.name ?? "",
             agentId: initialValues?.agentId ?? "",
-            prompt: initialValues?.prompt ?? "",
+            prompt: initialValues?.prompt ?? "You are a helpful AI voice assistant for meetings. Speak naturally and conversationally. Be friendly, professional, and helpful. Keep responses concise and engaging. Always respond with your voice, not text.",
         }
     });
     const isEdit = !!initialValues?.id;
