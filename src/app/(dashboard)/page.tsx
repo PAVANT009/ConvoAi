@@ -19,7 +19,6 @@ const page = async () => {
 
   // Now call the protected procedure after confirming auth
   const data = await caller.agents.getMany({}); 
-  console.log(data);
 
   return <Homeview data={data.items} />
 }
