@@ -19,6 +19,8 @@ import {
  } from "@/components/ui/sidebar";
 import {  BotIcon, StarIcon, VideoIcon } from "lucide-react";
 import { DashboardUserButton } from "./dashboard-user-button";
+import { DashboardTrail } from "./dashboard-trail";
+
 
  const firstSection = [
     {
@@ -110,7 +112,8 @@ export const DashboardSidebar = () => {
                 </SidebarGroup>
             </SidebarContent>
             <SidebarFooter className="text-white">
-                <DashboardUserButton/>
+                    <DashboardTrail />
+                    <DashboardUserButton/>
             </SidebarFooter>
         </Sidebar>
     )

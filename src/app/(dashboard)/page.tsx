@@ -8,9 +8,7 @@ import { caller } from "@/trpc/server";
 export const dynamic = 'force-dynamic';
 
 const page = async () => {
-  const data = await caller.agents.getMany({}); 
-  console.log(data);
-
+  // Check session FIRST
   const session = await auth.api.getSession({
     headers: await headers(),
   })
@@ -18,6 +16,10 @@ const page = async () => {
   if(!session) {
     redirect('/sign-in');
   }
+
+  // Now call the protected procedure after confirming auth
+  const data = await caller.agents.getMany({}); 
+  console.log(data);
 
   return <Homeview data={data.items} />
 }
