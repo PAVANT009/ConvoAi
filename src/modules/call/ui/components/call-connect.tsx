@@ -1,7 +1,7 @@
 "use client";
 
 import { LoaderIcon } from "lucide-react";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import {
     Call,
     CallingState,
@@ -68,7 +68,7 @@ export const CallConnect = ({
             }
             setClient(undefined);
         }
-    },[userId, userName, userImage, generateToken]);
+    },[userId, userName, userImage, generateToken, client]);
 
     const [call, setCall] = useState<Call>();
     useEffect(() => {
@@ -113,7 +113,7 @@ export const CallConnect = ({
             }
         }
 
-    },[client, streamCallId]);
+    },[client, streamCallId, meetingId]);
 
     if(!client || !call) {
         return (
