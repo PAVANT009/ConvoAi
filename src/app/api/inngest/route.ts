@@ -8,8 +8,8 @@ export const { GET, POST, PUT } = serve({
   functions: [meetingsProcessing],
 });
 
-export const config = {
-  api: {
-    bodyParser: false, 
-  },
-};
+// export const config = {
+//   api: {
+//     bodyParser: false, 
+//   },
+// };
