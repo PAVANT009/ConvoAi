@@ -22,4 +22,5 @@ import { meetingsProcessing } from "@/inngest/functions";
 export const { GET, POST } = serve({
   client: inngest,
   functions: [meetingsProcessing],
+  baseUrl: process.env.INNGEST_BASE_URL,
 });
