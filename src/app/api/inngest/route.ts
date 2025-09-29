@@ -14,15 +14,12 @@
 // //   },
 // // };
 
+
 import { serve } from "inngest/next";
 import { inngest } from "@/inngest/client";
 import { meetingsProcessing } from "@/inngest/functions";
 
-const handler = serve({
+export const { GET, POST } = serve({
   client: inngest,
   functions: [meetingsProcessing],
 });
-
-export const GET = handler.GET;
-export const POST = handler.POST;
-export const PUT = handler.PUT;
