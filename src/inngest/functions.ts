@@ -154,7 +154,7 @@ export const meetingsProcessing = inngest.createFunction(
                 return {
                     ...item,
                     user: {
-                        name: (speaker as any).name,
+                        name: speaker.name,
                     }
                 }
             })
