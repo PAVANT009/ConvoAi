@@ -57,7 +57,7 @@ export const meetingsProcessing = inngest.createFunction(
 
       if (!res.ok) {
         throw new Error(
-          `Failed to fetch transcript: ${res.status} ${res.statusText}`
+          `Failed to fetch transcript: ${res.status} ${event.data.transcriptUrl} ${res.statusText}`
         );
       }
 
