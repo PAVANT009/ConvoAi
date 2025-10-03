@@ -321,14 +321,19 @@ export async function POST(req: NextRequest) {
           .set({ status: "processing" })
           .where(eq(meetings.id, updatedMeeting.id));
       }
-      const res = await inngest.send({
-        name: "meetings/processing",
-        data: {
-          meetingId: updatedMeeting.id,
-          transcriptUrl: updatedMeeting.transcriptUrl!,
-        },
-      });
-      console.log("Inngest send response:", res);
+      try {
+        const res = await inngest.send({
+          name: "meetings/processing",
+          data: {
+            meetingId: updatedMeeting.id,
+            transcriptUrl: updatedMeeting.transcriptUrl!,
+          },
+        });
+        console.log("✅ Inngest send SUCCESS:", res);
+      } catch (error) {
+        console.error("❌ Inngest send FAILED:", error);
+        // Don't throw - still return success to Stream webhook
+      }
     }
 
     return NextResponse.json({ status: "ok" }); // ✅ added
