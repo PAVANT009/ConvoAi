@@ -1,35 +1,14 @@
 import JSONL from "jsonl-parse-stringify";
+import OpenAI from "openai";
 
 import { inngest } from "@/inngest/client";
 import { StreamTranscriptItem } from "@/modules/meetings/types";
 import { db } from "@/db";
 import { eq, inArray } from "drizzle-orm";
 import { agents, meetings, user } from "@/db/schema";
-import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
 
-const summarizer = createAgent({
-  name: "summarizer",
-  system: `You are an expert summarizer. You write readable, concise, simple content. You are given a transcript of a meeting and you need to summarize it.
-
-Use the following markdown structure for every output:
-
-### Overview
-Provide a detailed, engaging summary of the session's content. Focus on major features, user workflows, and any key takeaways. Write in a narrative style, using full sentences. Highlight unique or powerful aspects of the product, platform, or discussion.
-
-### Notes
-Break down key content into thematic sections with timestamp ranges. Each section should summarize key points, actions, or demos in bullet format.
-
-Example:
-#### Section Name
-- Main point or demo shown here
-- Another key insight or interaction
-- Follow-up tool or explanation provided
-
-#### Next Section
-- Feature X automatically does Y
-- Mention of integration with Z
-`.trim(),
-  model: openai({ model: "gpt-4o", apiKey: process.env.OPENAI_API_KEY! }),
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 export const meetingsProcessing = inngest.createFunction(
@@ -92,18 +71,17 @@ export const meetingsProcessing = inngest.createFunction(
         );
 
         const fallback = response
-        .split("\n")
-        .map((line) => line.trim())
-        .filter(Boolean)
-        .map((text, idx) => ({
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((text, idx) => ({
             id: String(idx),
-            text,              // ✅ matches StreamTranscriptItem
+            text,
             speaker_id: "unknown",
             start_ts: 0,
             stop_ts: 0,
             type: "segment",
-        })) as StreamTranscriptItem[];
-
+          })) as StreamTranscriptItem[];
 
         console.log("[meetings/processing] parse-transcript: fallback items", {
           meetingId: event.data.meetingId,
@@ -146,55 +124,53 @@ export const meetingsProcessing = inngest.createFunction(
       });
     });
 
-    // // 4) Summarize
-    // const { summary, error } = await step.run("summarize", async () => {
-    //   try {
-    //     console.log("[meetings/processing] summarize: starting", {
-    //       meetingId: event.data.meetingId,
-    //       transcriptItems: transcriptWithSpeakers.length,
-    //     });
-
-    //     const { output } = await summarizer.run(
-    //       "summarize the following transcript: " +
-    //         JSON.stringify(transcriptWithSpeakers)
-    //     );
-
-    //     const content =
-    //       output?.[0] && "content" in output[0]
-    //         ? (output[0] as TextMessage).content
-    //         : "";
-
-    //     console.log("[meetings/processing] summarize: success", {
-    //       meetingId: event.data.meetingId,
-    //       contentPreview: content.slice(0, 120),
-    //     });
-
-    //     return { summary: content, error: null };
-    //   } catch (err) {
-    //     console.error("[meetings/processing] summarize: failed", {
-    //       meetingId: event.data.meetingId,
-    //       error: (err as Error)?.message,
-    //     });
-    //     return { summary: null, error: err as Error };
-    //   }
-    // });
-
-    const summarizeContent = async () => {
+    // 4) Summarize with OpenAI - Direct call (no agent-kit)
+    const { summary, error } = await step.run("summarize", async () => {
       try {
         console.log("[meetings/processing] summarize: starting", {
           meetingId: event.data.meetingId,
           transcriptItems: transcriptWithSpeakers.length,
         });
 
-        const { output } = await summarizer.run(
-          "summarize the following transcript: " +
-            JSON.stringify(transcriptWithSpeakers)
-        );
+        const systemPrompt = `You are an expert summarizer. You write readable, concise, simple content. You are given a transcript of a meeting and you need to summarize it.
 
-        const content =
-          output?.[0] && "content" in output[0]
-            ? (output[0] as TextMessage).content
-            : "";
+Use the following markdown structure for every output:
+
+### Overview
+Provide a detailed, engaging summary of the session's content. Focus on major features, user workflows, and any key takeaways. Write in a narrative style, using full sentences. Highlight unique or powerful aspects of the product, platform, or discussion.
+
+### Notes
+Break down key content into thematic sections with timestamp ranges. Each section should summarize key points, actions, or demos in bullet format.
+
+Example:
+#### Section Name
+- Main point or demo shown here
+- Another key insight or interaction
+- Follow-up tool or explanation provided
+
+#### Next Section
+- Feature X automatically does Y
+- Mention of integration with Z`;
+
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o",
+          messages: [
+            {
+              role: "system",
+              content: systemPrompt,
+            },
+            {
+              role: "user",
+              content:
+                "Please summarize the following transcript: " +
+                JSON.stringify(transcriptWithSpeakers),
+            },
+          ],
+          temperature: 0.7,
+          max_tokens: 1500,
+        });
+
+        const content = response.choices[0].message.content || "";
 
         console.log("[meetings/processing] summarize: success", {
           meetingId: event.data.meetingId,
@@ -209,10 +185,7 @@ export const meetingsProcessing = inngest.createFunction(
         });
         return { summary: null, error: err as Error };
       }
-    };
-
-    const { summary, error } = await step.run("summarize", summarizeContent);
-
+    });
 
     // 5) Save summary
     await step.run("save-summary", async () => {
@@ -220,16 +193,16 @@ export const meetingsProcessing = inngest.createFunction(
         ? "Summary generation failed. Transcript has been processed, but no summary could be generated."
         : "No summary available.";
 
-    await db
-    .update(meetings)
-    .set({
-        summary: typeof summary === "string"
-        ? summary
-        : JSON.stringify(summary || fallbackSummary),
-        status: "completed",
-    })
-    .where(eq(meetings.id, event.data.meetingId));
-
+      await db
+        .update(meetings)
+        .set({
+          summary:
+            typeof summary === "string"
+              ? summary
+              : JSON.stringify(summary || fallbackSummary),
+          status: "completed",
+        })
+        .where(eq(meetings.id, event.data.meetingId));
 
       console.log("[meetings/processing] save-summary: completed", {
         meetingId: event.data.meetingId,
@@ -259,6 +232,268 @@ export const hello = inngest.createFunction(
     };
   }
 );
+
+// import JSONL from "jsonl-parse-stringify";
+
+// import { inngest } from "@/inngest/client";
+// import { StreamTranscriptItem } from "@/modules/meetings/types";
+// import { db } from "@/db";
+// import { eq, inArray } from "drizzle-orm";
+// import { agents, meetings, user } from "@/db/schema";
+// import { createAgent, openai, TextMessage } from "@inngest/agent-kit";
+
+// const summarizer = createAgent({
+//   name: "summarizer",
+//   system: `You are an expert summarizer. You write readable, concise, simple content. You are given a transcript of a meeting and you need to summarize it.
+
+// Use the following markdown structure for every output:
+
+// ### Overview
+// Provide a detailed, engaging summary of the session's content. Focus on major features, user workflows, and any key takeaways. Write in a narrative style, using full sentences. Highlight unique or powerful aspects of the product, platform, or discussion.
+
+// ### Notes
+// Break down key content into thematic sections with timestamp ranges. Each section should summarize key points, actions, or demos in bullet format.
+
+// Example:
+// #### Section Name
+// - Main point or demo shown here
+// - Another key insight or interaction
+// - Follow-up tool or explanation provided
+
+// #### Next Section
+// - Feature X automatically does Y
+// - Mention of integration with Z
+// `.trim(),
+//   model: openai({ model: "gpt-4o", apiKey: process.env.OPENAI_API_KEY! }),
+// });
+
+// export const meetingsProcessing = inngest.createFunction(
+//   { id: "meetings/processing" },
+//   { event: "meetings/processing" },
+//   async ({ event, step }) => {
+//     // 1) Fetch transcript
+//     const response = await step.run("fetch-transcript", async () => {
+//       console.log("[meetings/processing] fetch-transcript: starting", {
+//         meetingId: event.data.meetingId,
+//         url: event.data.transcriptUrl,
+//       });
+
+//       const res = await fetch(event.data.transcriptUrl);
+//       const text = await res.text();
+
+//       console.log("[meetings/processing] fetch-transcript: response", {
+//         meetingId: event.data.meetingId,
+//         status: res.status,
+//         ok: res.ok,
+//         contentType: res.headers.get("content-type"),
+//         length: text.length,
+//         preview: text.slice(0, 200),
+//       });
+
+//       if (!res.ok) {
+//         throw new Error(
+//           `Failed to fetch transcript: ${res.status} ${event.data.transcriptUrl} ${res.statusText}`
+//         );
+//       }
+
+//       return text;
+//     });
+
+//     // 2) Parse transcript (JSONL or JSON). Fallback = raw lines
+//     const transcript = await step.run("parse-transcript", async () => {
+//       try {
+//         let parsed: StreamTranscriptItem[];
+
+//         try {
+//           parsed = JSONL.parse(response) as StreamTranscriptItem[];
+//         } catch {
+//           parsed = JSON.parse(response) as StreamTranscriptItem[];
+//         }
+
+//         console.log("[meetings/processing] parse-transcript: parsed items", {
+//           meetingId: event.data.meetingId,
+//           count: parsed.length,
+//           sample: parsed[0] || null,
+//         });
+
+//         return parsed;
+//       } catch (err) {
+//         console.warn(
+//           "[meetings/processing] parse-transcript: parse failed, using fallback lines",
+//           {
+//             meetingId: event.data.meetingId,
+//             error: (err as Error)?.message,
+//           }
+//         );
+
+//         const fallback = response
+//         .split("\n")
+//         .map((line) => line.trim())
+//         .filter(Boolean)
+//         .map((text, idx) => ({
+//             id: String(idx),
+//             text,              // ✅ matches StreamTranscriptItem
+//             speaker_id: "unknown",
+//             start_ts: 0,
+//             stop_ts: 0,
+//             type: "segment",
+//         })) as StreamTranscriptItem[];
+
+
+//         console.log("[meetings/processing] parse-transcript: fallback items", {
+//           meetingId: event.data.meetingId,
+//           count: fallback.length,
+//         });
+
+//         return fallback;
+//       }
+//     });
+
+//     // 3) Join with speaker names
+//     const transcriptWithSpeakers = await step.run("add-speakers", async () => {
+//       const speakerIds = [...new Set(transcript.map((item) => item.speaker_id))];
+
+//       const userSpeakers = await db
+//         .select()
+//         .from(user)
+//         .where(inArray(user.id, speakerIds));
+
+//       const agentSpeakers = await db
+//         .select()
+//         .from(agents)
+//         .where(inArray(agents.id, speakerIds));
+
+//       const speakers = [...userSpeakers, ...agentSpeakers];
+
+//       console.log("[meetings/processing] add-speakers: fetched speakers", {
+//         meetingId: event.data.meetingId,
+//         total: speakers.length,
+//       });
+
+//       return transcript.map((item) => {
+//         const speaker = speakers.find((s) => s.id === item.speaker_id);
+//         return {
+//           ...item,
+//           user: {
+//             name: speaker?.name ?? "Unknown",
+//           },
+//         };
+//       });
+//     });
+
+//     // // 4) Summarize
+//     // const { summary, error } = await step.run("summarize", async () => {
+//     //   try {
+//     //     console.log("[meetings/processing] summarize: starting", {
+//     //       meetingId: event.data.meetingId,
+//     //       transcriptItems: transcriptWithSpeakers.length,
+//     //     });
+
+//     //     const { output } = await summarizer.run(
+//     //       "summarize the following transcript: " +
+//     //         JSON.stringify(transcriptWithSpeakers)
+//     //     );
+
+//     //     const content =
+//     //       output?.[0] && "content" in output[0]
+//     //         ? (output[0] as TextMessage).content
+//     //         : "";
+
+//     //     console.log("[meetings/processing] summarize: success", {
+//     //       meetingId: event.data.meetingId,
+//     //       contentPreview: content.slice(0, 120),
+//     //     });
+
+//     //     return { summary: content, error: null };
+//     //   } catch (err) {
+//     //     console.error("[meetings/processing] summarize: failed", {
+//     //       meetingId: event.data.meetingId,
+//     //       error: (err as Error)?.message,
+//     //     });
+//     //     return { summary: null, error: err as Error };
+//     //   }
+//     // });
+
+//     const summarizeContent = async () => {
+//       try {
+//         console.log("[meetings/processing] summarize: starting", {
+//           meetingId: event.data.meetingId,
+//           transcriptItems: transcriptWithSpeakers.length,
+//         });
+
+//         const { output } = await summarizer.run(
+//           "summarize the following transcript: " +
+//             JSON.stringify(transcriptWithSpeakers)
+//         );
+
+//         const content =
+//           output?.[0] && "content" in output[0]
+//             ? (output[0] as TextMessage).content
+//             : "";
+
+//         console.log("[meetings/processing] summarize: success", {
+//           meetingId: event.data.meetingId,
+//           contentPreview: content.slice(0, 120),
+//         });
+
+//         return { summary: content, error: null };
+//       } catch (err) {
+//         console.error("[meetings/processing] summarize: failed", {
+//           meetingId: event.data.meetingId,
+//           error: (err as Error)?.message,
+//         });
+//         return { summary: null, error: err as Error };
+//       }
+//     };
+
+//     const { summary, error } = await step.run("summarize", summarizeContent);
+
+
+//     // 5) Save summary
+//     await step.run("save-summary", async () => {
+//       const fallbackSummary = error
+//         ? "Summary generation failed. Transcript has been processed, but no summary could be generated."
+//         : "No summary available.";
+
+//     await db
+//     .update(meetings)
+//     .set({
+//         summary: typeof summary === "string"
+//         ? summary
+//         : JSON.stringify(summary || fallbackSummary),
+//         status: "completed",
+//     })
+//     .where(eq(meetings.id, event.data.meetingId));
+
+
+//       console.log("[meetings/processing] save-summary: completed", {
+//         meetingId: event.data.meetingId,
+//         usedFallback: !summary,
+//       });
+//     });
+//   }
+// );
+
+// // A minimal debug function you can trigger to verify Inngest wiring
+// export const hello = inngest.createFunction(
+//   { id: "debug/hello" },
+//   { event: "debug/hello" },
+//   async ({ event, step }) => {
+//     const ts = new Date().toISOString();
+
+//     await step.run("log", async () => {
+//       console.log("[debug/hello] triggered", {
+//         ts,
+//         data: event.data ?? null,
+//       });
+//     });
+
+//     return {
+//       message: "Hello from Inngest",
+//       ts,
+//     };
+//   }
+// );
 
 // import JSONL from "jsonl-parse-stringify"; 
 
