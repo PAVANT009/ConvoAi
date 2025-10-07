@@ -146,8 +146,40 @@ export const meetingsProcessing = inngest.createFunction(
       });
     });
 
-    // 4) Summarize
-    const { summary, error } = await step.run("summarize", async () => {
+    // // 4) Summarize
+    // const { summary, error } = await step.run("summarize", async () => {
+    //   try {
+    //     console.log("[meetings/processing] summarize: starting", {
+    //       meetingId: event.data.meetingId,
+    //       transcriptItems: transcriptWithSpeakers.length,
+    //     });
+
+    //     const { output } = await summarizer.run(
+    //       "summarize the following transcript: " +
+    //         JSON.stringify(transcriptWithSpeakers)
+    //     );
+
+    //     const content =
+    //       output?.[0] && "content" in output[0]
+    //         ? (output[0] as TextMessage).content
+    //         : "";
+
+    //     console.log("[meetings/processing] summarize: success", {
+    //       meetingId: event.data.meetingId,
+    //       contentPreview: content.slice(0, 120),
+    //     });
+
+    //     return { summary: content, error: null };
+    //   } catch (err) {
+    //     console.error("[meetings/processing] summarize: failed", {
+    //       meetingId: event.data.meetingId,
+    //       error: (err as Error)?.message,
+    //     });
+    //     return { summary: null, error: err as Error };
+    //   }
+    // });
+
+    const summarizeContent = async () => {
       try {
         console.log("[meetings/processing] summarize: starting", {
           meetingId: event.data.meetingId,
@@ -177,7 +209,10 @@ export const meetingsProcessing = inngest.createFunction(
         });
         return { summary: null, error: err as Error };
       }
-    });
+    };
+
+    const { summary, error } = await step.run("summarize", summarizeContent);
+
 
     // 5) Save summary
     await step.run("save-summary", async () => {
