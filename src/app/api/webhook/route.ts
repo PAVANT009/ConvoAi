@@ -161,21 +161,31 @@ export async function POST(req: NextRequest) {
       : callId;
 
     if (process.env.OPENAI_API_KEY) {
+      const realtimeModel = process.env.OPENAI_REALTIME_MODEL?.trim();
+      const greeting =
+        process.env.OPENAI_REALTIME_GREETING?.trim() ||
+        "Hi everyone, I'm your AI meeting assistant. I'm here to help with summaries and questions.";
+
       try {
         const call = streamVideo.video.call("default", extractedCallId);
         const realtimeClient = await streamVideo.video.connectOpenAi({
           call,
           openAiApiKey: process.env.OPENAI_API_KEY!,
           agentUserId: existingAgent.id,
-          model: "gpt-4o-realtime-preview",
+          ...(realtimeModel ? { model: realtimeModel } : {}),
         });
 
         const basePrompt =
-          existingAgent.prompt  ||
+          existingAgent.prompt ||
           "You are a helpful AI meeting assistant. Speak naturally and professionally in English.";
 
+        const sessionInstructions = `${basePrompt}
+
+When you first join the call, immediately greet the participants once with a short spoken introduction. Use this greeting as the starting point: "${greeting}".
+After the initial greeting, continue assisting naturally and do not repeat the greeting unless someone explicitly asks you to reintroduce yourself.`;
+
         await realtimeClient.updateSession({
-          instructions: basePrompt,
+          instructions: sessionInstructions,
           voice:
             (process.env.OPENAI_REALTIME_VOICE as
               | "verse"
@@ -196,58 +206,22 @@ export async function POST(req: NextRequest) {
           },
         });
 
-        const greeting =
-          process.env.OPENAI_REALTIME_GREETING ||
-          "Hi everyone, I'm your AI meeting assistant. I'm here to help with summaries and questions.";
+        realtimeClient.createResponse();
 
-        // Type-safe approach for realtimeClient methods
-        const client = realtimeClient as unknown as {
-          createResponse?: (params: {
-            instructions: string;
-            modalities: string[];
-            conversation: boolean;
-          }) => Promise<void>;
-          response?: {
-            create: (params: {
-              instructions: string;
-              modalities: string[];
-              conversation: boolean;
-            }) => Promise<void>;
-          };
-          send?: (params: {
-            type: string;
-            response: {
-              instructions: string;
-              modalities: string[];
-              conversation: boolean;
-            };
-          }) => Promise<void>;
-        };
-
-        if (typeof client.createResponse === "function") {
-          await client.createResponse({
-            instructions: greeting,
-            modalities: ["audio"],
-            conversation: true,
-          });
-        } else if (typeof client.response?.create === "function") {
-          await client.response.create({
-            instructions: greeting,
-            modalities: ["audio"],
-            conversation: true,
-          });
-        } else if (typeof client.send === "function") {
-          await client.send({
-            type: "response.create",
-            response: {
-              instructions: greeting,
-              modalities: ["audio"],
-              conversation: true,
-            },
-          });
-        }
+        console.log("OpenAI realtime agent connected:", {
+          meetingId,
+          callId: extractedCallId,
+          agentId: existingAgent.id,
+          model: realtimeModel || "sdk-default",
+        });
       } catch (err) {
-        console.error("Failed to connect OpenAI realtime:", err);
+        console.error("Failed to connect OpenAI realtime:", {
+          meetingId,
+          callId: extractedCallId,
+          agentId: existingAgent.id,
+          model: realtimeModel || "sdk-default",
+          error: err,
+        });
       }
     }
 
@@ -267,9 +241,83 @@ export async function POST(req: NextRequest) {
       );
 
     try {
-      await streamVideo.video.call("default", callId).end();
+      const call = streamVideo.video.call("default", callId);
+      const { call: callData } = await call.get();
+      const meetingId = callData.custom?.meetingId as string | undefined;
+
+      if (!meetingId) {
+        console.warn("Participant left call without meetingId in call custom data:", {
+          callId,
+          participantUserId: event.participant.user.id,
+          participantRole: event.participant.role,
+          reason: event.reason,
+        });
+        return NextResponse.json({ status: "ok" });
+      }
+
+      const [meeting] = await db
+        .select({ agentId: meetings.agentId })
+        .from(meetings)
+        .where(eq(meetings.id, meetingId));
+
+      if (!meeting) {
+        console.warn("Participant left call for unknown meeting:", {
+          meetingId,
+          callId,
+          participantUserId: event.participant.user.id,
+          participantRole: event.participant.role,
+          reason: event.reason,
+        });
+        return NextResponse.json({ status: "ok" });
+      }
+
+      const leftParticipantUserId = event.participant.user.id;
+      const leftWasAgent = leftParticipantUserId === meeting.agentId;
+
+      if (leftWasAgent) {
+        console.warn("AI agent left the call session; keeping the meeting active:", {
+          meetingId,
+          callId,
+          agentId: meeting.agentId,
+          reason: event.reason,
+        });
+        return NextResponse.json({ status: "ok" });
+      }
+
+      const remainingHumanParticipants = (callData.session?.participants ?? [])
+        .filter((participant) => participant.user.id !== meeting.agentId)
+        .filter(
+          (participant) =>
+            participant.user_session_id !== event.participant.user_session_id
+        );
+
+      if (remainingHumanParticipants.length > 0) {
+        console.log("Human participant left, but other humans are still in the call:", {
+          meetingId,
+          callId,
+          leftParticipantUserId,
+          remainingHumanParticipantIds: remainingHumanParticipants.map(
+            (participant) => participant.user.id
+          ),
+        });
+        return NextResponse.json({ status: "ok" });
+      }
+
+      await call.end();
+
+      console.log("Ended call after the last human participant left:", {
+        meetingId,
+        callId,
+        leftParticipantUserId,
+      });
     } catch (err) {
-      console.error("Error ending call:", err);
+      console.error("Error handling call.session_participant_left:", {
+        callId,
+        participantUserId: event.participant.user.id,
+        participantRole: event.participant.role,
+        reason: event.reason,
+        error: err,
+      });
     }
 
     return NextResponse.json({ status: "ok" });
