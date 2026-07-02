@@ -14,6 +14,7 @@ import {
 
 import { db } from "@/db";
 import { agents, meetings } from "@/db/schema";
+import { ensureRealtimeAgentConnected } from "@/lib/realtime-agent";
 import { streamVideo } from "@/lib/stream-video";
 import { inngest } from "@/inngest/client";
 import { generateAvatarUri } from "@/lib/avatar";
@@ -161,65 +162,26 @@ export async function POST(req: NextRequest) {
       : callId;
 
     if (process.env.OPENAI_API_KEY) {
-      const realtimeModel = process.env.OPENAI_REALTIME_MODEL?.trim();
-      const greeting =
-        process.env.OPENAI_REALTIME_GREETING?.trim() ||
-        "Hi everyone, I'm your AI meeting assistant. I'm here to help with summaries and questions.";
-
       try {
-        const call = streamVideo.video.call("default", extractedCallId);
-        const realtimeClient = await streamVideo.video.connectOpenAi({
-          call,
-          openAiApiKey: process.env.OPENAI_API_KEY!,
-          agentUserId: existingAgent.id,
-          ...(realtimeModel ? { model: realtimeModel } : {}),
+        const result = await ensureRealtimeAgentConnected({
+          meetingId,
+          callId: extractedCallId,
+          agentId: existingAgent.id,
+          agentPrompt: existingAgent.prompt,
         });
-
-        const basePrompt =
-          existingAgent.prompt ||
-          "You are a helpful AI meeting assistant. Speak naturally and professionally in English.";
-
-        const sessionInstructions = `${basePrompt}
-
-When you first join the call, immediately greet the participants once with a short spoken introduction. Use this greeting as the starting point: "${greeting}".
-After the initial greeting, continue assisting naturally and do not repeat the greeting unless someone explicitly asks you to reintroduce yourself.`;
-
-        await realtimeClient.updateSession({
-          instructions: sessionInstructions,
-          voice:
-            (process.env.OPENAI_REALTIME_VOICE as
-              | "verse"
-              | "alloy"
-              | "ash"
-              | "ballad"
-              | "coral"
-              | "echo"
-              | "sage"
-              | "shimmer"
-              | undefined) || "verse",
-          modalities: ["text", "audio"],
-          turn_detection: {
-            type: "server_vad",
-            threshold: 0.5,
-            prefix_padding_ms: 200,
-            silence_duration_ms: 700,
-          },
-        });
-
-        realtimeClient.createResponse();
 
         console.log("OpenAI realtime agent connected:", {
           meetingId,
           callId: extractedCallId,
           agentId: existingAgent.id,
-          model: realtimeModel || "sdk-default",
+          model: result.model,
+          status: result.status,
         });
       } catch (err) {
         console.error("Failed to connect OpenAI realtime:", {
           meetingId,
           callId: extractedCallId,
           agentId: existingAgent.id,
-          model: realtimeModel || "sdk-default",
           error: err,
         });
       }

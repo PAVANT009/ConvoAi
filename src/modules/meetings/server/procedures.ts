@@ -11,6 +11,7 @@ import { streamVideo } from "@/lib/stream-video";
 import { generateAvatarUri } from "@/lib/avatar";
 import JSONL from "jsonl-parse-stringify";
 import { streamChat } from "@/lib/stream-chat";
+import { ensureRealtimeAgentConnected } from "@/lib/realtime-agent";
 
 export const meetingsRouter = createTRPCRouter({
   generateChatToken: protectedProcedure.mutation(async ({ ctx }) => {
@@ -135,6 +136,62 @@ export const meetingsRouter = createTRPCRouter({
 
     return token;
   }),
+  connectAgent: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const [existingMeeting] = await db
+        .select({
+          ...getTableColumns(meetings),
+          agent: agents,
+        })
+        .from(meetings)
+        .innerJoin(agents, eq(meetings.agentId, agents.id))
+        .where(
+          and(
+            eq(meetings.id, input.id),
+            eq(meetings.userId, ctx.auth.user.id),
+          )
+        );
+
+      if (!existingMeeting) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Meeting not found",
+        });
+      }
+
+      if (!existingMeeting.streamCallId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Meeting has no Stream call ID",
+        });
+      }
+
+      await streamVideo.upsertUsers([
+        {
+          id: existingMeeting.agent.id,
+          name: existingMeeting.agent.name,
+          role: "user",
+          image: generateAvatarUri({
+            seed: existingMeeting.agent.id,
+            variant: "botttsNeutral",
+          }),
+        },
+      ]);
+
+      const callId = existingMeeting.streamCallId.includes(":")
+        ? existingMeeting.streamCallId.split(":")[1]
+        : existingMeeting.streamCallId;
+
+      const result = await ensureRealtimeAgentConnected({
+        meetingId: existingMeeting.id,
+        callId,
+        agentId: existingMeeting.agent.id,
+        agentPrompt: existingMeeting.agent.prompt,
+      });
+
+      return result;
+    }),
   remove: protectedProcedure
         .input(z.object({id: z.string()}))
         .mutation(async ({ input, ctx }) => {
