@@ -94,9 +94,11 @@ export const CallConnect = ({
 
         return () => {
             console.log("🧹 Cleaning up call instance");
-            if (_call.state.callingState !== CallingState.LEFT) {
-                _call.leave();
-                _call.endCall();
+            const state = _call.state.callingState;
+            if (state !== CallingState.LEFT) {
+                _call.leave().catch((err) => {
+                    console.error("Failed to leave call during cleanup:", err);
+                });
             }
             callCreated.current = false;
             setCall(undefined);
