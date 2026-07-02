@@ -94,11 +94,9 @@ export const CallConnect = ({
 
         return () => {
             console.log("🧹 Cleaning up call instance");
-            const state = _call.state.callingState;
-            if (state !== CallingState.LEFT) {
-                _call.leave().catch((err) => {
-                    console.error("Failed to leave call during cleanup:", err);
-                });
+            if (_call.state.callingState !== CallingState.LEFT) {
+                _call.leave();
+                _call.endCall();
             }
             callCreated.current = false;
             setCall(undefined);
@@ -117,7 +115,7 @@ export const CallConnect = ({
         <StreamVideo client={client}>
             <div className="h-full">
                 <StreamCall call={call}>
-                    <CallUI meetingId={meetingId} meetingName={meetingName} />
+                    <CallUI meetingName={meetingName} />
                 </StreamCall>
             </div>
         </StreamVideo>

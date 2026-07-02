@@ -12,10 +12,8 @@ const openai = new OpenAI({
 });
 
 export const meetingsProcessing = inngest.createFunction(
-  { 
-    id: "meetings/processing",
-    triggers: [{ event: "meetings/processing" }]
-  },
+  { id: "meetings/processing" },
+  { event: "meetings/processing" },
   async ({ event, step }) => {
     // 1) Fetch transcript
     const response = await step.run("fetch-transcript", async () => {
@@ -216,10 +214,8 @@ Example:
 
 // A minimal debug function you can trigger to verify Inngest wiring
 export const hello = inngest.createFunction(
-  { 
-    id: "debug/hello",
-    triggers: [{ event: "debug/hello" }]
-  },
+  { id: "debug/hello" },
+  { event: "debug/hello" },
   async ({ event, step }) => {
     const ts = new Date().toISOString();
 
